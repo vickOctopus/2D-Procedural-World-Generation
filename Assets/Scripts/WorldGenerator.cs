@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using System.IO;
+using System.Collections.Generic;
 
 public class WorldGenerator : MonoBehaviour
 {
@@ -11,6 +12,7 @@ public class WorldGenerator : MonoBehaviour
     
     [Header("Generation Settings")]
     [SerializeField] private int seed = 0;
+    [SerializeField] private int outpostCount = 3;  // 据点数量
     [SerializeField, Range(0.01f, 0.1f)] private float noiseScale = 0.05f;
     [SerializeField, Range(0.3f, 0.7f)] private float fillPercentage = 0.45f;
     [SerializeField, Range(1, 10)] private int smoothIterations = 5;
@@ -18,27 +20,43 @@ public class WorldGenerator : MonoBehaviour
     [Header("References")]
     [SerializeField] private Tilemap tilemap;
     [SerializeField] private TileBase wallTile;
+    [SerializeField] private GameObject outpostPrefab;
     
     private int[,] tiles; // 0 = 空气, 1 = 墙壁
     private AreaTemplate spawnAreaTemplate;
+    private AreaTemplate outpostAreaTemplate;
     private bool[,] protectedTiles; // 标记必须保持的区域
+    private List<Vector2> outpostPositions = new List<Vector2>();  // 记录所有据点位置（包括出生点）
+    
+    private float minOutpostDistance;  // 缓存计算结果
     
     private void Start()
     {
         LoadSpawnAreaTemplate();
+        InitializeMinDistance();
         GenerateWorld();
+    }
+    
+    private void InitializeMinDistance()
+    {
+        float worldDiagonal = Mathf.Sqrt(worldWidth * worldWidth + worldHeight * worldHeight);
+        float idealSpacing = worldDiagonal / Mathf.Sqrt(outpostCount + 1);
+        minOutpostDistance = idealSpacing * 0.5f;
     }
     
     private void LoadSpawnAreaTemplate()
     {
         TextAsset jsonFile = Resources.Load<TextAsset>("Templates/spawn_area");
+        TextAsset outpostFile = Resources.Load<TextAsset>("Templates/outpost_area");
+        
         if (jsonFile != null)
         {
             spawnAreaTemplate = JsonUtility.FromJson<AreaTemplate>(jsonFile.text);
         }
-        else
+        
+        if (outpostFile != null)
         {
-            Debug.LogError("Failed to load spawn area template!");
+            outpostAreaTemplate = JsonUtility.FromJson<AreaTemplate>(outpostFile.text);
         }
     }
     
@@ -46,33 +64,108 @@ public class WorldGenerator : MonoBehaviour
     {
         tiles = new int[worldWidth, worldHeight];
         protectedTiles = new bool[worldWidth, worldHeight];
+        outpostPositions.Clear();
         
-        // 第一步：使用柏林噪声生成基本地形
-        GenerateBaseNoise();
-        
-        // 第二步：生成出生点区域
-        GenerateSpawnArea();
-        
-        // 第三步：使用元胞自动机平滑地形
-        SmoothTerrain();
-        
-        // 第四步：在Tilemap上绘制瓦片
-        DrawTilemap();
+        GenerateBaseNoise();    // 基础噪声
+        GenerateAreas();        // 特殊区域
+        SmoothTerrain();        // 平滑地形
+        DrawTilemap();          // 绘制地图
     }
     
-    private void GenerateSpawnArea()
+    private void GenerateAreas()
     {
-        if (spawnAreaTemplate == null) return;
+        System.Random prng = new System.Random(seed);
         
-        // 直接从layout获取尺寸
-        int width = spawnAreaTemplate.layout[0].Length;
-        int height = spawnAreaTemplate.layout.Length;
+        // 生成出生点
+        GenerateRandomArea(spawnAreaTemplate, prng);
         
-        int startX = worldWidth / 2 - width / 2;
-        int startY = (int)(worldHeight * 0.7f);
+        // 生成据点
+        for (int i = 0; i < outpostCount; i++)
+        {
+            GenerateRandomArea(outpostAreaTemplate, prng);
+        }
+    }
+    
+    private void GenerateRandomArea(AreaTemplate template, System.Random prng)
+    {
+        int width = template.layout[0].Length;
+        int height = template.layout.Length;
+        int attempts = 0;
+        int maxAttempts = 100;
         
-        // 应用模板
-        ApplyTemplate(startX, startY);
+        while (attempts < maxAttempts)
+        {
+            int startX = prng.Next(width, worldWidth - width);
+            int startY = prng.Next(height, worldHeight - height);
+            Vector2 newPos = new Vector2(startX + width/2, startY + height/2);
+            
+            // 检查与其他区域的距离
+            bool tooClose = false;
+            foreach (var pos in outpostPositions)
+            {
+                if (Vector2.Distance(newPos, pos) < minOutpostDistance)
+                {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose)
+            {
+                ApplyAreaTemplate(template, startX, startY);  // 直接调用ApplyAreaTemplate
+                outpostPositions.Add(newPos);
+                break;
+            }
+            
+            attempts++;
+        }
+    }
+    
+    private void ApplyAreaTemplate(AreaTemplate template, int startX, int startY)
+    {
+        for (int y = 0; y < template.layout.Length; y++)
+        {
+            string row = template.layout[template.layout.Length - 1 - y];
+            for (int x = 0; x < row.Length; x++)
+            {
+                int worldX = startX + x;
+                int worldY = startY + y;
+                
+                if (IsOutOfBounds(worldX, worldY)) continue;
+                
+                char tile = row[x];
+                Vector3 position = new Vector3(
+                    worldX - worldWidth/2,
+                    worldY - worldHeight/2,
+                    0
+                );
+                
+                switch (tile)
+                {
+                    case '#':
+                        tiles[worldX, worldY] = 1; // 普通墙
+                        break;
+                    case '=':
+                        tiles[worldX, worldY] = 1; // 必须的墙
+                        protectedTiles[worldX, worldY] = true;
+                        break;
+                    case '.':
+                        tiles[worldX, worldY] = 0; // 必须的空气
+                        protectedTiles[worldX, worldY] = true;
+                        break;
+                    case 'P':
+                        tiles[worldX, worldY] = 0; // 空气
+                        protectedTiles[worldX, worldY] = true;
+                        PlayerController.instance.transform.position = position;
+                        break;
+                    case 'O':
+                        tiles[worldX, worldY] = 0; // 空气
+                        protectedTiles[worldX, worldY] = true;
+                        Instantiate(outpostPrefab, position, Quaternion.identity);
+                        break;
+                }
+            }
+        }
     }
     
     private void GenerateBaseNoise()
@@ -174,49 +267,6 @@ public class WorldGenerator : MonoBehaviour
                 {
                     Vector3Int position = new Vector3Int(x - worldWidth/2, y - worldHeight/2, 0);
                     tilemap.SetTile(position, wallTile);
-                }
-            }
-        }
-    }
-    
-    private void ApplyTemplate(int startX, int startY)
-    {
-        // 从下到上读取layout
-        for (int y = 0; y < spawnAreaTemplate.layout.Length; y++)
-        {
-            // 反转y轴读取顺序
-            string row = spawnAreaTemplate.layout[spawnAreaTemplate.layout.Length - 1 - y];
-            for (int x = 0; x < row.Length; x++)
-            {
-                int worldX = startX + x;
-                int worldY = startY + y;
-                
-                if (IsOutOfBounds(worldX, worldY)) continue;
-                
-                char tile = row[x];
-                switch (tile)
-                {
-                    case '#':
-                        tiles[worldX, worldY] = 1; // 普通墙
-                        break;
-                    case '=':
-                        tiles[worldX, worldY] = 1; // 必须的墙
-                        protectedTiles[worldX, worldY] = true;
-                        break;
-                    case '.':
-                        tiles[worldX, worldY] = 0; // 必须的空气
-                        protectedTiles[worldX, worldY] = true;
-                        break;
-                    case 'P':
-                        tiles[worldX, worldY] = 0; // 空气
-                        protectedTiles[worldX, worldY] = true;
-                        Vector3 spawnPosition = new Vector3(
-                            worldX - worldWidth/2,
-                            worldY - worldHeight/2,
-                            0
-                        );
-                        PlayerController.instance.transform.position = spawnPosition;
-                        break;
                 }
             }
         }
