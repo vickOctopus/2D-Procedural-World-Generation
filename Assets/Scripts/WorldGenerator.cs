@@ -232,9 +232,6 @@ public class WorldGenerator : MonoBehaviour
         {
             for (int y = 0; y < worldHeight; y++)
             {
-                // 跳过受保护的tile（包括边界）
-                if (protectedTiles[x, y]) continue;
-                
                 float noiseValue = Mathf.PerlinNoise(
                     (x + offsetX) * noiseScale, 
                     (y + offsetY) * noiseScale
