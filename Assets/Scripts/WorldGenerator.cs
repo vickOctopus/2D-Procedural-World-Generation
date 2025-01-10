@@ -15,6 +15,7 @@ public class WorldGenerator : MonoBehaviour
     [Header("World Settings")]
     [SerializeField] private int worldWidth = 100;
     [SerializeField] private int worldHeight = 100;
+    [SerializeField, Range(1, 10)] private int boundaryWidth = 1;
     
     [Header("Generation Settings")]
     [SerializeField] private int seed = 0;
@@ -22,7 +23,6 @@ public class WorldGenerator : MonoBehaviour
     [SerializeField, Range(0.01f, 0.1f)] private float noiseScale = 0.05f;
     [SerializeField, Range(0.3f, 0.7f)] private float fillPercentage = 0.45f;
     [SerializeField, Range(1, 10)] private int smoothIterations = 5;
-    [SerializeField, Range(1, 5)] private int boundaryWidth = 1;
     
     [Header("References")]
     [SerializeField] private Tilemap tilemap;
@@ -35,11 +35,20 @@ public class WorldGenerator : MonoBehaviour
     private AreaTemplate outpostAreaTemplate;
     private bool[,] protectedTiles; // 标记必须保持的区域
     private List<Vector2> outpostPositions = new List<Vector2>();  // 记录所有据点位置（包括出生点）
+    private WorldBoundaryGenerator boundaryGenerator;
     
     private float minOutpostDistance;  // 缓存计算结果
     
     private void Start()
     {
+        boundaryGenerator = new WorldBoundaryGenerator(
+            worldWidth,
+            worldHeight,
+            boundaryWidth,
+            tilemap,
+            boundaryTile
+        );
+        
         LoadSpawnAreaTemplate();
         InitializeMinDistance();
         GenerateWorld();
@@ -77,47 +86,8 @@ public class WorldGenerator : MonoBehaviour
         GenerateBaseNoise();    // 基础噪声
         GenerateAreas();        // 特殊区域
         SmoothTerrain();        // 平滑地形
-        GenerateBoundary();     // 边界生成（最后）
         DrawTilemap();          // 绘制地图
-    }
-    
-    private void GenerateBoundary()
-    {
-        // 生成上下边界
-        for (int x = 0; x < worldWidth; x++)
-        {
-            // 底部边界
-            for (int y = 0; y < boundaryWidth; y++)
-            {
-                tiles[x, y] = TileType.Boundary;
-                protectedTiles[x, y] = true;
-            }
-            
-            // 顶部边界
-            for (int y = worldHeight - boundaryWidth; y < worldHeight; y++)
-            {
-                tiles[x, y] = TileType.Boundary;
-                protectedTiles[x, y] = true;
-            }
-        }
-        
-        // 生成左右边界
-        for (int y = 0; y < worldHeight; y++)
-        {
-            // 左边界
-            for (int x = 0; x < boundaryWidth; x++)
-            {
-                tiles[x, y] = TileType.Boundary;
-                protectedTiles[x, y] = true;
-            }
-            
-            // 右边界
-            for (int x = worldWidth - boundaryWidth; x < worldWidth; x++)
-            {
-                tiles[x, y] = TileType.Boundary;
-                protectedTiles[x, y] = true;
-            }
-        }
+        boundaryGenerator.GenerateBoundary();  // 生成边界（在世界范围外）
     }
     
     private void GenerateAreas()
@@ -303,9 +273,6 @@ public class WorldGenerator : MonoBehaviour
     
     private void DrawTilemap()
     {
-        // 清除现有的瓦片
-        tilemap.ClearAllTiles();
-        
         // 绘制新的瓦片
         for (int x = 0; x < worldWidth; x++)
         {
@@ -317,8 +284,8 @@ public class WorldGenerator : MonoBehaviour
                     case TileType.Wall:
                         tilemap.SetTile(position, wallTile);
                         break;
-                    case TileType.Boundary:
-                        tilemap.SetTile(position, boundaryTile);
+                    case TileType.Air:
+                        tilemap.SetTile(position, null);
                         break;
                 }
             }

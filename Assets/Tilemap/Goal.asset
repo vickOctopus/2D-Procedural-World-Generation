@@ -10,15 +10,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9d1514134bc4fbd41bb739b1b9a49231, type: 3}
-  m_Name: Indestructable
+  m_Name: Goal
   m_EditorClassIdentifier: 
-  m_DefaultSprite: {fileID: -788146487, guid: 94586516c45914e7abf8578214c574d4, type: 3}
+  m_DefaultSprite: {fileID: -1067864741, guid: 94586516c45914e7abf8578214c574d4, type: 3}
   m_DefaultGameObject: {fileID: 0}
   m_DefaultColliderType: 1
   m_TilingRules:
   - m_Id: 8
     m_Sprites:
-    - {fileID: -788146487, guid: 94586516c45914e7abf8578214c574d4, type: 3}
+    - {fileID: -1067864741, guid: 94586516c45914e7abf8578214c574d4, type: 3}
     m_GameObject: {fileID: 0}
     m_MinAnimationSpeed: 1
     m_MaxAnimationSpeed: 1
