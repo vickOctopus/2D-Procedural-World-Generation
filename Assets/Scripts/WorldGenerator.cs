@@ -2,14 +2,19 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 using System.IO;
 using System.Collections.Generic;
-using System.Linq;
+
+public enum TileType
+{
+    Air = 0,
+    Wall = 1,
+    Boundary = 2
+}
 
 public class WorldGenerator : MonoBehaviour
 {
     [Header("World Settings")]
     [SerializeField] private int worldWidth = 100;
     [SerializeField] private int worldHeight = 100;
-
     
     [Header("Generation Settings")]
     [SerializeField] private int seed = 0;
@@ -17,29 +22,15 @@ public class WorldGenerator : MonoBehaviour
     [SerializeField, Range(0.01f, 0.1f)] private float noiseScale = 0.05f;
     [SerializeField, Range(0.3f, 0.7f)] private float fillPercentage = 0.45f;
     [SerializeField, Range(1, 10)] private int smoothIterations = 5;
+    [SerializeField, Range(1, 5)] private int boundaryWidth = 1;
     
     [Header("References")]
     [SerializeField] private Tilemap tilemap;
     [SerializeField] private TileBase wallTile;
-    [SerializeField] private TileBase indestructibleTile;  // 不可破坏的瓦片
+    [SerializeField] private TileBase boundaryTile;
     [SerializeField] private GameObject outpostPrefab;
     
-    // 常量定义
-    private const int TILE_AIR = 0;
-    private const int TILE_WALL = 1;
-    private const int TILE_INDESTRUCTIBLE = 2;
-    private const int CORNER_SIZE = 4;
-    
-    // 角落区域定义
-    private readonly Vector2Int[] CORNER_POSITIONS = new Vector2Int[]
-    {
-        new Vector2Int(0, 0),                    // 左下角
-        new Vector2Int(0, -CORNER_SIZE),         // 左上角
-        new Vector2Int(-CORNER_SIZE, 0),         // 右下角
-        new Vector2Int(-CORNER_SIZE, -CORNER_SIZE) // 右上角
-    };
-    
-    private int[,] tiles; // 0 = 空气, 1 = 墙壁
+    private TileType[,] tiles;
     private AreaTemplate spawnAreaTemplate;
     private AreaTemplate outpostAreaTemplate;
     private bool[,] protectedTiles; // 标记必须保持的区域
@@ -79,38 +70,52 @@ public class WorldGenerator : MonoBehaviour
     
     private void GenerateWorld()
     {
-        tiles = new int[worldWidth, worldHeight];
+        tiles = new TileType[worldWidth, worldHeight];
         protectedTiles = new bool[worldWidth, worldHeight];
         outpostPositions.Clear();
         
         GenerateBaseNoise();    // 基础噪声
-        GenerateCornerAreas(); // 生成角落区域
         GenerateAreas();        // 特殊区域
         SmoothTerrain();        // 平滑地形
+        GenerateBoundary();     // 边界生成（最后）
         DrawTilemap();          // 绘制地图
     }
     
-    private void GenerateCornerAreas()
+    private void GenerateBoundary()
     {
-        foreach (var cornerPos in CORNER_POSITIONS)
+        // 生成上下边界
+        for (int x = 0; x < worldWidth; x++)
         {
-            int startX = cornerPos.x < 0 ? worldWidth + cornerPos.x : cornerPos.x;
-            int startY = cornerPos.y < 0 ? worldHeight + cornerPos.y : cornerPos.y;
-            GenerateCorner(startX, startY);
-        }
-    }
-    
-    private void GenerateCorner(int startX, int startY)
-    {
-        for (int x = 0; x < CORNER_SIZE; x++)
-        {
-            for (int y = 0; y < CORNER_SIZE; y++)
+            // 底部边界
+            for (int y = 0; y < boundaryWidth; y++)
             {
-                int worldX = startX + x;
-                int worldY = startY + y;
-                
-                tiles[worldX, worldY] = TILE_INDESTRUCTIBLE;
-                protectedTiles[worldX, worldY] = true;
+                tiles[x, y] = TileType.Boundary;
+                protectedTiles[x, y] = true;
+            }
+            
+            // 顶部边界
+            for (int y = worldHeight - boundaryWidth; y < worldHeight; y++)
+            {
+                tiles[x, y] = TileType.Boundary;
+                protectedTiles[x, y] = true;
+            }
+        }
+        
+        // 生成左右边界
+        for (int y = 0; y < worldHeight; y++)
+        {
+            // 左边界
+            for (int x = 0; x < boundaryWidth; x++)
+            {
+                tiles[x, y] = TileType.Boundary;
+                protectedTiles[x, y] = true;
+            }
+            
+            // 右边界
+            for (int x = worldWidth - boundaryWidth; x < worldWidth; x++)
+            {
+                tiles[x, y] = TileType.Boundary;
+                protectedTiles[x, y] = true;
             }
         }
     }
@@ -142,37 +147,26 @@ public class WorldGenerator : MonoBehaviour
             int startY = prng.Next(height, worldHeight - height);
             Vector2 newPos = new Vector2(startX + width/2, startY + height/2);
             
-            bool tooClose = outpostPositions.Any(pos => Vector2.Distance(newPos, pos) < minOutpostDistance);
-            bool overlapsCorner = IsOverlappingCorner(startX, startY, width, height);
-            
-            if (!tooClose && !overlapsCorner)
+            // 检查与其他区域的距离
+            bool tooClose = false;
+            foreach (var pos in outpostPositions)
             {
-                ApplyAreaTemplate(template, startX, startY);
+                if (Vector2.Distance(newPos, pos) < minOutpostDistance)
+                {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose)
+            {
+                ApplyAreaTemplate(template, startX, startY);  // 直接调用ApplyAreaTemplate
                 outpostPositions.Add(newPos);
                 break;
             }
             
             attempts++;
         }
-    }
-    
-    private bool IsOverlappingCorner(int startX, int startY, int width, int height)
-    {
-        Rect area = new Rect(startX, startY, width, height);
-        
-        foreach (var cornerPos in CORNER_POSITIONS)
-        {
-            int cornerX = cornerPos.x < 0 ? worldWidth + cornerPos.x : cornerPos.x;
-            int cornerY = cornerPos.y < 0 ? worldHeight + cornerPos.y : cornerPos.y;
-            
-            Rect cornerArea = new Rect(cornerX, cornerY, CORNER_SIZE, CORNER_SIZE);
-            if (area.Overlaps(cornerArea))
-            {
-                return true;
-            }
-        }
-        
-        return false;
     }
     
     private void ApplyAreaTemplate(AreaTemplate template, int startX, int startY)
@@ -197,23 +191,23 @@ public class WorldGenerator : MonoBehaviour
                 switch (tile)
                 {
                     case '#':
-                        tiles[worldX, worldY] = 1; // 普通墙
+                        tiles[worldX, worldY] = TileType.Wall;
                         break;
                     case '=':
-                        tiles[worldX, worldY] = 1; // 必须的墙
+                        tiles[worldX, worldY] = TileType.Wall;
                         protectedTiles[worldX, worldY] = true;
                         break;
                     case '.':
-                        tiles[worldX, worldY] = 0; // 必须的空气
+                        tiles[worldX, worldY] = TileType.Air;
                         protectedTiles[worldX, worldY] = true;
                         break;
                     case 'P':
-                        tiles[worldX, worldY] = 0; // 空气
+                        tiles[worldX, worldY] = TileType.Air;
                         protectedTiles[worldX, worldY] = true;
                         PlayerController.instance.transform.position = position;
                         break;
                     case 'O':
-                        tiles[worldX, worldY] = 0; // 空气
+                        tiles[worldX, worldY] = TileType.Air;
                         protectedTiles[worldX, worldY] = true;
                         Instantiate(outpostPrefab, position, Quaternion.identity);
                         break;
@@ -238,12 +232,15 @@ public class WorldGenerator : MonoBehaviour
         {
             for (int y = 0; y < worldHeight; y++)
             {
+                // 跳过受保护的tile（包括边界）
+                if (protectedTiles[x, y]) continue;
+                
                 float noiseValue = Mathf.PerlinNoise(
                     (x + offsetX) * noiseScale, 
                     (y + offsetY) * noiseScale
                 );
                 
-                tiles[x, y] = noiseValue < fillPercentage ? 1 : 0;
+                tiles[x, y] = noiseValue < fillPercentage ? TileType.Wall : TileType.Air;
             }
         }
     }
@@ -252,7 +249,7 @@ public class WorldGenerator : MonoBehaviour
     {
         for (int i = 0; i < smoothIterations; i++)
         {
-            int[,] newTiles = new int[worldWidth, worldHeight];
+            TileType[,] newTiles = new TileType[worldWidth, worldHeight];
             
             for (int x = 0; x < worldWidth; x++)
             {
@@ -269,9 +266,9 @@ public class WorldGenerator : MonoBehaviour
                     
                     // 应用元胞自动机规则
                     if (wallCount > 4)
-                        newTiles[x, y] = 1;
+                        newTiles[x, y] = TileType.Wall;
                     else if (wallCount < 4)
-                        newTiles[x, y] = 0;
+                        newTiles[x, y] = TileType.Air;
                     else
                         newTiles[x, y] = tiles[x, y];
                 }
@@ -294,7 +291,7 @@ public class WorldGenerator : MonoBehaviour
                     
                 if (IsOutOfBounds(neighborX, neighborY))
                     wallCount++;
-                else if (tiles[neighborX, neighborY] == 1)
+                else if (tiles[neighborX, neighborY] == TileType.Wall)
                     wallCount++;
             }
         }
@@ -309,8 +306,10 @@ public class WorldGenerator : MonoBehaviour
     
     private void DrawTilemap()
     {
+        // 清除现有的瓦片
         tilemap.ClearAllTiles();
         
+        // 绘制新的瓦片
         for (int x = 0; x < worldWidth; x++)
         {
             for (int y = 0; y < worldHeight; y++)
@@ -318,11 +317,11 @@ public class WorldGenerator : MonoBehaviour
                 Vector3Int position = new Vector3Int(x - worldWidth/2, y - worldHeight/2, 0);
                 switch (tiles[x, y])
                 {
-                    case TILE_WALL:
+                    case TileType.Wall:
                         tilemap.SetTile(position, wallTile);
                         break;
-                    case TILE_INDESTRUCTIBLE:
-                        tilemap.SetTile(position, indestructibleTile);
+                    case TileType.Boundary:
+                        tilemap.SetTile(position, boundaryTile);
                         break;
                 }
             }
