@@ -7,7 +7,15 @@ public enum TileType
 {
     Air = 0,
     Wall = 1,
-    Boundary = 2
+    Ore = 2
+}
+
+public enum OreType
+{
+    None = 0,
+    Coal = 1,
+    Iron = 2,
+    Gold = 3
 }
 
 public class WorldGenerator : MonoBehaviour
@@ -30,6 +38,9 @@ public class WorldGenerator : MonoBehaviour
     [SerializeField] private TileBase boundaryTile;
     [SerializeField] private GameObject outpostPrefab;
     
+    [Header("Ore Generation")]
+    [SerializeField] private List<OreCluster> oreClusters = new List<OreCluster>();
+    
     private TileType[,] tiles;
     private AreaTemplate spawnAreaTemplate;
     private AreaTemplate outpostAreaTemplate;
@@ -38,6 +49,8 @@ public class WorldGenerator : MonoBehaviour
     private WorldBoundaryGenerator boundaryGenerator;
     
     private float minOutpostDistance;  // 缓存计算结果
+    private OreType[,] oreTypes;
+    private OreGenerator oreGenerator;
     
     private void Start()
     {
@@ -51,6 +64,22 @@ public class WorldGenerator : MonoBehaviour
         
         LoadSpawnAreaTemplate();
         InitializeMinDistance();
+        
+        // 初始化数组
+        tiles = new TileType[worldWidth, worldHeight];
+        protectedTiles = new bool[worldWidth, worldHeight];
+        oreTypes = new OreType[worldWidth, worldHeight];
+        
+        // 创建矿石生成器
+        oreGenerator = new OreGenerator(
+            worldWidth,
+            worldHeight,
+            tiles,
+            oreTypes,
+            protectedTiles,
+            seed
+        );
+        
         GenerateWorld();
     }
     
@@ -79,13 +108,11 @@ public class WorldGenerator : MonoBehaviour
     
     private void GenerateWorld()
     {
-        tiles = new TileType[worldWidth, worldHeight];
-        protectedTiles = new bool[worldWidth, worldHeight];
         outpostPositions.Clear();
-        
         GenerateBaseNoise();    // 基础噪声
         GenerateAreas();        // 特殊区域
         SmoothTerrain();        // 平滑地形
+        oreGenerator.GenerateOres(oreClusters);  // 生成矿石
         DrawTilemap();          // 绘制地图
         boundaryGenerator.GenerateBoundary();  // 生成边界（在世界范围外）
     }
@@ -212,6 +239,18 @@ public class WorldGenerator : MonoBehaviour
         }
     }
     
+    private void UpdateTerrainData(TileType[,] newTiles)
+    {
+        // 更新地形数据
+        for (int x = 0; x < worldWidth; x++)
+        {
+            for (int y = 0; y < worldHeight; y++)
+            {
+                tiles[x, y] = newTiles[x, y];
+            }
+        }
+    }
+    
     private void SmoothTerrain()
     {
         for (int i = 0; i < smoothIterations; i++)
@@ -241,7 +280,7 @@ public class WorldGenerator : MonoBehaviour
                 }
             }
             
-            tiles = newTiles;
+            UpdateTerrainData(newTiles);
         }
     }
     
@@ -286,6 +325,17 @@ public class WorldGenerator : MonoBehaviour
                         break;
                     case TileType.Air:
                         tilemap.SetTile(position, null);
+                        break;
+                    case TileType.Ore:
+                        // 从oreClusters中找到对应的矿石配置
+                        foreach (var cluster in oreClusters)
+                        {
+                            if (cluster.oreType == oreTypes[x, y])
+                            {
+                                tilemap.SetTile(position, cluster.oreTile);
+                                break;
+                            }
+                        }
                         break;
                 }
             }

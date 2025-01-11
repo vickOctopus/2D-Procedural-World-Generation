@@ -150,7 +150,7 @@ Rigidbody2D:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 484872266}
-  m_BodyType: 2
+  m_BodyType: 0
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
@@ -168,7 +168,7 @@ Rigidbody2D:
   m_Interpolate: 0
   m_SleepingMode: 1
   m_CollisionDetection: 0
-  m_Constraints: 0
+  m_Constraints: 4
 --- !u!212 &484872268
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -275,11 +275,12 @@ Transform:
   m_GameObject: {fileID: 484872266}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 1.601, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 519420032}
+  - {fileID: 500936875}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &484872271
@@ -294,6 +295,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b180ff30aa9b4dfb9293bb1f9715f68, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!1 &500936874
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 500936875}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &500936875
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 500936874}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0.532, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 484872270}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -396,7 +428,7 @@ GameObject:
   m_Component:
   - component: {fileID: 684935636}
   - component: {fileID: 684935635}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: WorldGenerator
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -415,16 +447,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 448df84e2924a4e37b1c1ebbaacf1cf1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  worldWidth: 300
-  worldHeight: 300
+  worldWidth: 480
+  worldHeight: 320
+  boundaryWidth: 10
   seed: 0
   outpostCount: 5
   noiseScale: 0.1
-  fillPercentage: 0.55
+  fillPercentage: 0.6
   smoothIterations: 5
   tilemap: {fileID: 1889344652}
   wallTile: {fileID: 11400000, guid: cc0182b42c5fb417ea845c540e891295, type: 2}
+  boundaryTile: {fileID: 11400000, guid: fa47a662016d3488d9cdafd7bc128518, type: 2}
   outpostPrefab: {fileID: 9113825909166914670, guid: fe7358024e7aa45bda81e0001f39be6e, type: 3}
+  oreClusters:
+  - oreType: 2
+    oreTile: {fileID: 11400000, guid: 46b3bdf3bed8546b6b9d45b67aa03cc1, type: 2}
+    veinCount: 10
+    veinDistance: 16
+    veinSize: 11
 --- !u!4 &684935636
 Transform:
   m_ObjectHideFlags: 0
